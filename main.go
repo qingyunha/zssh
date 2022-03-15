@@ -24,7 +24,11 @@ import (
 func main() {
 	log.SetFlags(0)
 	ssh := exec.Command("ssh", os.Args[1:]...)
-	ptmx, err := pty.Start(ssh)
+	// for sshpass work, control terminal should be no change
+	// ssh(1) SSH_ASKPASS, passpord read from the current terminal other than stdin
+	// pty.Start will setsid and setctty, avoid that
+	attr := &syscall.SysProcAttr{Setsid: false, Setctty: false}
+	ptmx, err := pty.StartWithAttrs(ssh, nil, attr)
 	if err != nil {
 		log.Println("start pty error:", err)
 		return
