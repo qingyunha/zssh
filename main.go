@@ -23,7 +23,8 @@ import (
 
 func main() {
 	log.SetFlags(0)
-	ssh := exec.Command("ssh", os.Args[1:]...)
+	args := append([]string{"-e", "none"}, os.Args[1:]...)
+	ssh := exec.Command("ssh", args...)
 	// for sshpass work, control terminal should be no change
 	// ssh(1) SSH_ASKPASS, passpord read from the current terminal other than stdin
 	// pty.Start will setsid and setctty, avoid that
@@ -89,7 +90,7 @@ func rzsz(ptmx *os.File, c *copyStdin) error {
 
 func dorz(ptmx *os.File, start []byte) {
 	defer term.MakeRaw(0)
-	cmd := exec.Command("rz", "--rename", "--escape", "--binary")
+	cmd := exec.Command("rz", "--rename", "--binary")
 	cmd.Stdout = ptmx
 	cmd.Stderr = os.Stdout
 	cmd.Stdin = ptmx
@@ -113,7 +114,7 @@ func dosz(ptmx *os.File, start []byte, c *copyStdin) {
 		ptmx.Write([]byte{0x18, 0x18, 0x18, 0x18, 0x18})
 		return
 	}
-	cmd := exec.Command("sz", file, "--escape", "--binary")
+	cmd := exec.Command("sz", file, "--binary")
 	cmd.Stdout = ptmx
 	cmd.Stderr = os.Stdout
 	cmd.Stdin = &fWithStart{ptmx, start}
