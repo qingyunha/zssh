@@ -78,7 +78,7 @@ func rzsz(ptmx *os.File, c *copyStdin) error {
 			return err
 		}
 		if bytes.Contains(buf[:n], []byte("**\x18B00000000000000")) {
-			dorz(ptmx, buf[:n])
+			dorz(ptmx, buf[:n], c)
 			continue
 		}
 		if bytes.Contains(buf[:n], []byte("**\x18B0100000023be50")) {
@@ -99,9 +99,19 @@ func rzsz(ptmx *os.File, c *copyStdin) error {
 	return nil
 }
 
-func dorz(ptmx *os.File, start []byte) {
+func dorz(ptmx *os.File, start []byte, c *copyStdin) {
+	c.cancel()
+	defer c.restart()
 	defer term.MakeRaw(0)
+	os.Stdout.Write([]byte{'\r'})
+	dir, err := selectDir()
+	if err != nil {
+		log.Printf("select Dir error: %v", err)
+		ptmx.Write([]byte{0x18, 0x18, 0x18, 0x18, 0x18})
+		return
+	}
 	cmd := exec.Command("rz", "--rename", "--binary")
+	cmd.Dir = dir
 	cmd.Stdout = ptmx
 	cmd.Stderr = os.Stdout
 	cmd.Stdin = ptmx
@@ -165,7 +175,35 @@ func selectFile() (string, error) {
 		}
 		return
 	})
-	name, err := line.Prompt("Please select a file (use tab complete): ")
+	name, err := line.Prompt("select a file to send: ")
+	return name, err
+}
+
+func selectDir() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	line := liner.NewLiner()
+	defer line.Close()
+	line.SetCompleter(func(line string) (c []string) {
+		dir, file := path.Split(line)
+		if dir == "" {
+			dir = "."
+		}
+		fs, err := ioutil.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range fs {
+			name := e.Name()
+			if strings.HasPrefix(name, file) && e.IsDir() {
+				c = append(c, filepath.Join(dir, name)+"/")
+			}
+		}
+		return
+	})
+	name, err := line.PromptWithSuggestion("select directory to recive file: ", cwd, -1)
 	return name, err
 }
 
