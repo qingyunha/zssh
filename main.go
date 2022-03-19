@@ -25,11 +25,7 @@ func main() {
 	log.SetFlags(0)
 	args := append([]string{"-e", "none"}, os.Args[1:]...)
 	ssh := exec.Command("ssh", args...)
-	// for sshpass work, control terminal should be no change
-	// ssh(1) SSH_ASKPASS, passpord read from the current terminal other than stdin
-	// pty.Start will setsid and setctty, avoid that
-	attr := &syscall.SysProcAttr{Setsid: false, Setctty: false}
-	ptmx, err := pty.StartWithAttrs(ssh, nil, attr)
+	ptmx, err := pty.Start(ssh)
 	if err != nil {
 		log.Println("start pty error:", err)
 		return
@@ -65,6 +61,14 @@ func main() {
 
 func rzsz(ptmx *os.File, c *copyStdin) error {
 	var buf [512]byte
+	const PASSWORD_MATCH = "assword"
+	const MAX_PASSWORD_LINE = 3
+	passwd := os.Getenv("ZSSH_PASSWORD")
+	os.Unsetenv("ZSSH_PASSWORD") // not realy work
+	readCont := 0
+	if passwd == "" {
+		readCont = MAX_PASSWORD_LINE
+	}
 	for {
 		n, err := ptmx.Read(buf[:])
 		if err == io.EOF || errors.Is(err, syscall.EIO) {
@@ -83,6 +87,13 @@ func rzsz(ptmx *os.File, c *copyStdin) error {
 		}
 		if _, err := os.Stdout.Write(buf[:n]); err != nil {
 			return err
+		}
+		if readCont < MAX_PASSWORD_LINE {
+			readCont += 1
+			if bytes.Contains(buf[:n], []byte(PASSWORD_MATCH)) {
+				ptmx.Write([]byte(passwd))
+				ptmx.Write([]byte{'\n'})
+			}
 		}
 	}
 	return nil
