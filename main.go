@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -57,9 +58,14 @@ func main() {
 	os.Stdout.Close()
 	os.Stdout, err = os.OpenFile("/dev/tty", os.O_WRONLY, 0666)
 	if err != nil {
-		panic(err)
+		log.Println("open tty error:", err)
+		return
 	}
-	c := newCopyStdin(ptmx)
+	c, err := newCopyStdin(ptmx)
+	if err != nil {
+		log.Println("copy stdin error:", err)
+		return
+	}
 
 	if err := rzsz(ptmx, c); err != nil {
 		log.Println(err)
@@ -93,7 +99,7 @@ func rzsz(ptmx *os.File, c *copyStdin) error {
 			continue
 		}
 		if nn, err := os.Stdout.Write(buf[:n]); err != nil || nn != n {
-			panic(err)
+			return fmt.Errorf("stdout write(want %d got %d) error: %w", n, nn, err)
 		}
 		if readCont < MAX_PASSWORD_LINE {
 			readCont += 1
@@ -235,10 +241,10 @@ type copyStdin struct {
 	dst    *os.File
 }
 
-func newCopyStdin(dst *os.File) *copyStdin {
+func newCopyStdin(dst *os.File) (*copyStdin, error) {
 	src, err := newfdCancel(0)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	c := &copyStdin{
 		make(chan struct{}),
@@ -252,7 +258,7 @@ func newCopyStdin(dst *os.File) *copyStdin {
 			c.src.setNonblock(true)
 		}
 	}()
-	return c
+	return c, nil
 }
 
 func (c *copyStdin) restart() {
