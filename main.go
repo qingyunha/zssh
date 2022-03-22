@@ -52,6 +52,13 @@ func main() {
 	}
 	defer func() { _ = term.Restore(0, oldState) }()
 
+	// reopen stdout, keep it in block mode
+	// otherwise write will return EAGIN, e.g. cat a large file
+	os.Stdout.Close()
+	os.Stdout, err = os.OpenFile("/dev/tty", os.O_WRONLY, 0666)
+	if err != nil {
+		panic(err)
+	}
 	c := newCopyStdin(ptmx)
 
 	if err := rzsz(ptmx, c); err != nil {
@@ -85,8 +92,8 @@ func rzsz(ptmx *os.File, c *copyStdin) error {
 			dosz(ptmx, buf[:n], c)
 			continue
 		}
-		if _, err := os.Stdout.Write(buf[:n]); err != nil {
-			return err
+		if nn, err := os.Stdout.Write(buf[:n]); err != nil || nn != n {
+			panic(err)
 		}
 		if readCont < MAX_PASSWORD_LINE {
 			readCont += 1
