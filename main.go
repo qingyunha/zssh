@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -21,6 +22,8 @@ import (
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
+
+var aliveflag bool
 
 func main() {
 	log.SetFlags(0)
@@ -46,6 +49,24 @@ func main() {
 		}
 	}()
 	defer func() { signal.Stop(ch); close(ch) }()
+	go func() {
+		interval := 120
+		alive := os.Getenv("ZSSH_KEEPALIVE")
+		if alive != "" {
+			interval, _ = strconv.Atoi(alive)
+		}
+		if interval == 0 {
+			return
+		}
+		for {
+			time.Sleep(time.Duration(interval) * time.Second)
+			if !aliveflag {
+				//syscall.Kill(0, syscall.SIGWINCH)
+				ptmx.Write([]byte{0x1b, 0x1b}) // send ESC ESC
+			}
+			aliveflag = false
+		}
+	}()
 
 	oldState, err := term.MakeRaw(0)
 	if err != nil {
@@ -330,6 +351,7 @@ func (fdc *fdCancel) Read(p []byte) (n int, err error) {
 		if !fdc.readyRead() {
 			return 0, os.ErrClosed
 		}
+		aliveflag = true
 	}
 }
 
